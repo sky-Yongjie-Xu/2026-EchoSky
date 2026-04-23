@@ -1,39 +1,60 @@
-from importlib import import_module
+import subprocess
+import sys
 
-class CardiacEchoPipeline:
-    def __init__(self, config):
-        self.modules = {}
-        self.load_all_modules(config["all_modules"])  # 先加载所有模块
+class CardiacEchoEngine:
+    """
+    心脏超声功能选择执行器
+    不自动流水线！想跑什么功能就跑什么
+    """
 
-    def load_all_modules(self, module_names):
-        """一次性加载所有可用模块，不自动运行"""
-        for name in module_names:
-            module_class = import_module(f"modules.{name}")
-            self.modules[name] = module_class()
+    def __init__(self):
+        # 注册所有功能 → 对应执行命令
+        self.commands = {
+            "lv_segmentation_train": [
+                sys.executable, "modules/segmentation/lv_segmentation.py",
+                "--data_dir", "data",
+                "--num_epochs", "50",
+                "--batch_size", "8",
+                "--device", "cuda"
+            ],
+            "lv_segmentation_test": [
+                sys.executable, "modules/segmentation/lv_segmentation.py",
+                "--data_dir", "data",
+                "--weights", "output/segmentation/best.pt",
+                "--run_test",
+                "--device", "cuda"
+            ],
+            "lv_segmentation_video": [
+                sys.executable, "modules/segmentation/lv_segmentation.py",
+                "--data_dir", "data",
+                "--weights", "output/segmentation/best.pt",
+                "--save_video",
+                "--device", "cuda"
+            ]
+        }
 
-    def run_module(self, module_name, echo_data, prev_results=None):
+    def run(self, task_name):
         """
-        单独执行某一个功能（最常用！）
-        :param module_name: 模块名，如 preprocess/segmentation/quantify
-        :param echo_data: 超声图像数据
-        :param prev_results: 前面步骤的结果（可选）
+        🔥 选择功能直接运行！
+        可选：
+        - lv_segmentation_train
+        - lv_segmentation_test
+        - lv_segmentation_video
         """
-        if prev_results is None:
-            prev_results = {}
+        if task_name not in self.commands:
+            raise ValueError(f"未知功能：{task_name}")
+        
+        print(f"🚀 正在运行：{task_name}")
+        subprocess.run(self.commands[task_name])
 
-        if module_name not in self.modules:
-            raise ValueError(f"模块 {module_name} 未加载！")
 
-        # 只运行你选择的功能
-        result = self.modules[module_name].process(echo_data, prev_results)
-        return result
+# ======================
+# 你只需要这样用！
+# ======================
+if __name__ == "__main__":
+    engine = CardiacEchoEngine()
 
-    def run_selected(self, module_list, echo_data):
-        """
-        批量执行你指定的一组功能（自定义顺序）
-        不是固定流水线！是你自己选顺序！
-        """
-        results = {}
-        for name in module_list:
-            results[name] = self.run_module(name, echo_data, results)
-        return results
+    # 选择你要执行的功能（三选一）
+    # engine.run("lv_segmentation_train")    # 训练
+    # engine.run("lv_segmentation_test")     # 测试
+    engine.run("lv_segmentation_video")    # 推理+保存视频

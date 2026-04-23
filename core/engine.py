@@ -13,6 +13,7 @@ class CardiacEchoEngine:
             "modules.segmentation.lv_segmentation",
             "modules.functional_analysis.lv_ef_prediction",
             "modules.measurement.plax_hypertrophy_inference",
+            "modules.disease_classification.a4c_classification_inference",
         ]
 
         for path in module_paths:

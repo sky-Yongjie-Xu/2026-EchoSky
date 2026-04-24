@@ -10,7 +10,7 @@ if __name__ == "__main__":
     # engine.run("view_classification_echoprime", dataset_dir="datasets/example_study_echoprime", visualize=True)
 
     #### 左心室 分割
-    # engine.run("lv_segmentation_dynamic", save_video=True)
+    engine.run("lv_segmentation_dynamic", save_video=True)
 
     #### 左心室 射血分数预测
     # engine.run("lv_ef_prediction_dynamic")

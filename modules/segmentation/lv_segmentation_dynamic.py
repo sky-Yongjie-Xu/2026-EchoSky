@@ -103,7 +103,7 @@ def run(
 
     # Set default output directory
     if output is None:
-        output = os.path.join("output", "segmentation", "{}_{}".format(model_name, "pretrained" if pretrained else "random"))
+        output = os.path.join("modules/segmentation/output", "segmentation", "{}_{}".format(model_name, "pretrained" if pretrained else "random"))
     os.makedirs(output, exist_ok=True)
 
     # Set device for computations

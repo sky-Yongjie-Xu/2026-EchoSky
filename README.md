@@ -13,7 +13,9 @@
 | **射血分数预测** | 预测左心室射血分数（LVEF），支持多clip推理 | R(2+1)D-18 |
 | **报告生成** | 基于EchoPrime架构，自动生成结构化超声报告（支持中英文） | MViT-V2 + ConvNeXt |
 | **B模式线性测量** | 2D结构分割测量（IVS, LVID, LVPW, Aorta, LA, RV, PA, IVC） | DeepLabV3-ResNet50 |
-| **多普勒测量** | 多普勒超声峰值速度测量（AVVmax, TRVmax, MRVmax, LVOTVmax等） | DeepLabV3-ResNet50 |
+| **多普勒峰值速度测量** | 多普勒超声峰值速度测量（AVVmax, TRVmax, MRVmax, LVOTVmax等） | DeepLabV3-ResNet50 |
+| **二尖瓣E/A测量** | 二尖瓣血流多普勒 E峰/A峰 速度测量及E/A比值计算 | DeepLabV3-ResNet50 |
+| **TAPSE测量** | 三尖瓣环收缩期位移（TAPSE）测量，评估右心室功能 | DeepLabV3-ResNet50 |
 | **PLAX自动测量** | 在PLAX视角下自动测量LVPW、LVID、IVS等指标 | DeepLabV3-ResNet50 |
 | **疾病分类** | A4C视角下的淀粉样变性二分类 | R3D-18 |
 
@@ -45,6 +47,8 @@ EchoSky/
 │   ├── measurement/                 # 自动测量模块
 │   │   ├── b_mode_linear_measurement.py    # B模式2D结构测量
 │   │   ├── doppler_measurement.py          # 多普勒峰值速度测量
+│   │   ├── doppler_mv_ea_measurement.py    # 二尖瓣E/A测量
+│   │   ├── doppler_tapse_measurement.py    # TAPSE测量
 │   │   ├── plax_hypertrophy_inference.py   # PLAX测量（待启用）
 │   │   └── utils.py
 │   ├── disease_classification/      # 疾病分类模块
@@ -111,6 +115,12 @@ engine.run("b_mode_linear_measurement", model_weights="aorta", folders="path/to/
 
 # 多普勒峰值速度测量（支持AVVmax, TRVmax, MRVmax, LVOTVmax等）
 engine.run("doppler_measurement", model_weights="avvmax", folders="path/to/videos", output_path_folders="output/doppler")
+
+# 二尖瓣E/A测量（计算E峰、A峰速度及E/A比值）
+engine.run("doppler_mv_ea_measurement", folders="path/to/videos", output_path_folders="output/mv_ea")
+
+# TAPSE测量（三尖瓣环收缩期位移，评估右心室功能）
+engine.run("doppler_tapse_measurement", folders="path/to/videos", output_path_folders="output/tapse")
 
 # 报告生成（支持中英文）
 engine.run("report_generation_echoprime", dataset_dir="path/to/dicom/folder")
@@ -230,7 +240,7 @@ training:
   engine.run("b_mode_linear_measurement", model_weights="aorta", folders="path/to/videos", output_path_folders="output/measurement")
   ```
 
-### 6. 多普勒测量 (Doppler Measurement)
+### 6. 多普勒峰值速度测量 (Doppler Peak Velocity Measurement)
 
 - **输入**: DICOM多普勒图像文件夹
 - **输出**:
@@ -248,7 +258,37 @@ training:
   engine.run("doppler_measurement", model_weights="avvmax", folders="path/to/videos", output_path_folders="output/doppler")
   ```
 
-### 7. PLAX自动测量 (PLAX Measurement) ⚠️ 待启用
+### 7. 二尖瓣E/A测量 (Mitral Valve E/A Measurement)
+
+- **输入**: DICOM二尖瓣血流多普勒图像文件夹
+- **输出**:
+  - 标注E峰和A峰位置的图像
+  - CSV文件（包含E峰速度、A峰速度、E/A比值）
+- **临床意义**: 评估左心室舒张功能
+- **测量参数**:
+  - **E峰速度**: 早期充盈速度
+  - **A峰速度**: 晚期充盈速度（心房收缩）
+  - **E/A比值**: 舒张功能评估指标
+- **使用示例**:
+  ```python
+  engine.run("doppler_mv_ea_measurement", folders="path/to/videos", output_path_folders="output/mv_ea")
+  ```
+
+### 8. TAPSE测量 (Tricuspid Annular Plane Systolic Excursion)
+
+- **输入**: DICOM三尖瓣多普勒图像文件夹
+- **输出**:
+  - 标注测量点的图像
+  - CSV文件（包含TAPSE值）
+- **临床意义**: 评估右心室收缩功能的重要指标
+- **测量参数**:
+  - **TAPSE**: 三尖瓣环收缩期位移（单位：cm）
+- **使用示例**:
+  ```python
+  engine.run("doppler_tapse_measurement", folders="path/to/videos", output_path_folders="output/tapse")
+  ```
+
+### 9. PLAX自动测量 (PLAX Measurement) ⚠️ 待启用
 
 - **输入**: PLAX视角视频文件夹
 - **输出**:
@@ -257,7 +297,7 @@ training:
   - 测量曲线图
 - **测量指标**: LVPW（左室后壁厚度）、LVID（左室内径）、IVS（室间隔厚度）
 
-### 8. 疾病分类 (Disease Classification) ⚠️ 待启用
+### 10. 疾病分类 (Disease Classification) ⚠️ 待启用
 
 - **输入**: A4C视角视频文件夹
 - **输出**: CSV文件（包含每个视频的阳性置信度）

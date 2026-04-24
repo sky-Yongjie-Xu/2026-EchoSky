@@ -69,7 +69,7 @@ def run(
 
     # Set default output directory
     if output is None:
-        output = os.path.join("output", "video", "{}_{}_{}_{}".format(model_name, frames, period, "pretrained" if pretrained else "random"))
+        output = os.path.join("modules/functional_analysis/output", "video", "{}_{}_{}_{}".format(model_name, frames, period, "pretrained" if pretrained else "random"))
     os.makedirs(output, exist_ok=True)
 
     # Set device for computations

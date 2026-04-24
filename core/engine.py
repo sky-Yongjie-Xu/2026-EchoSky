@@ -1,17 +1,41 @@
 import sys
+import os
 import subprocess
 from importlib import import_module
 
 class CardiacEchoEngine:
     def __init__(self):
         self.modules = {}
+        self._fix_module_imports()  # ✅ 先修复导入
         self._discover_modules()
+
+    def _fix_module_imports(self):
+        """
+        🔥 核心修复：自动把所有模块文件夹加入 sys.path
+        所有子模块都可以直接 import 同级文件
+        """
+        base = os.path.abspath(".")
+        module_dirs = [
+            "modules/segmentation",
+            "modules/functional_analysis",
+            "modules/classification",
+            "modules/measurement",
+            "modules/disease_classification",
+        ]
+        for d in module_dirs:
+            p = os.path.join(base, d)
+            if p not in sys.path:
+                sys.path.insert(0, p)
 
     def _discover_modules(self):
         """自动发现并注册所有功能模块"""
         module_paths = [
-            "modules.segmentation.lv_segmentation",
-            "modules.functional_analysis.lv_ef_prediction",
+            "modules.segmentation.lv_segmentation_dynamic",
+            "modules.functional_analysis.lv_ef_prediction_dynamic",
+            "modules.classification.view_classification_echoprime",
+            "modules.report_generation.report_generation_echoprime",
+
+            
             "modules.measurement.plax_hypertrophy_inference",
             "modules.disease_classification.a4c_classification_inference",
         ]
@@ -20,7 +44,7 @@ class CardiacEchoEngine:
             mod = import_module(path)
             info = mod.register()
             self.modules[info["name"]] = {
-                "path": path.replace(".", "/") + ".py",  # 自动得到文件路径
+                "path": path.replace(".", "/") + ".py",
                 "desc": info["description"]
             }
 
@@ -37,14 +61,10 @@ class CardiacEchoEngine:
         script_path = self.modules[task_name]["path"]
         cmd = [sys.executable, script_path]
 
-        # 自动把关键字参数 → click 命令行参数
         for key, value in kwargs.items():
             if isinstance(value, bool):
-                # 处理 True/False
                 if value:
                     cmd.append(f"--{key}")
-                else:
-                    cmd.append(f"--skip_{key}")
             else:
                 cmd.append(f"--{key}")
                 cmd.append(str(value))

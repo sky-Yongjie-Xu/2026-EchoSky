@@ -1,3 +1,7 @@
-a4c-video-dir/
+a4c-video-dir
 weights/
-output/
+output
+assets
+datasets
+
+modules/report_generation/candidates_data

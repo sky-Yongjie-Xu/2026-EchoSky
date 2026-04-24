@@ -16,7 +16,7 @@ import tqdm
 import echonet
 
 
-@click.command("lv_ef_prediction")
+@click.command("lv_ef_prediction_dynamic")
 @click.option("--data_dir", type=click.Path(exists=True, file_okay=False), default=None)
 @click.option("--output", type=click.Path(file_okay=False), default=None)
 @click.option("--task", type=str, default="EF")
@@ -347,7 +347,7 @@ def register():
     你的主程序可以通过这个函数自动识别模块、调用run()
     """
     return {
-        "name": "lv_ef_prediction",
+        "name": "lv_ef_prediction_dynamic",
         "entry": run,
         "description": "EF 射血分数预测"
     }

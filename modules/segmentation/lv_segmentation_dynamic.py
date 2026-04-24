@@ -16,7 +16,7 @@ import tqdm
 import echonet
 
 
-@click.command("lv_segmentation")
+@click.command("lv_segmentation_dynamic")
 @click.option("--data_dir", type=click.Path(exists=True, file_okay=False), default=None)
 @click.option("--output", type=click.Path(file_okay=False), default=None)
 @click.option("--model_name", type=click.Choice(
@@ -504,7 +504,7 @@ def register():
     你的主程序可以通过这个函数自动识别模块、调用run()
     """
     return {
-        "name": "lv_segmentation",
+        "name": "lv_segmentation_dynamic",
         "entry": run,
         "description": "左心室分割（训练/测试/推理/视频生成）"
     }

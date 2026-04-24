@@ -19,7 +19,9 @@ if __name__ == "__main__":
     # engine.run("b_mode_linear_measurement", model_weights="aorta", folders="datasets/example_study_dynamic", output_path_folders="modules/measurement/output")
 
     ### 心脏多普勒测量
-    engine.run("doppler_measurement", model_weights="avvmax", folders="datasets/example_study_dynamic", output_path_folders="modules/measurement/output")
+    # engine.run("doppler_measurement", model_weights="avvmax", folders="datasets/example_study_dynamic", output_path_folders="modules/measurement/output")
+    # engine.run("doppler_mv_ea_measurement", folders="datasets/example_study_dynamic", output_path_folders="modules/measurement/output")
+    # engine.run("doppler_tapse_measurement", folders="datasets/example_study_dynamic", output_path_folders="modules/measurement/output")
 
     #### 心脏结构化报告生成
     # engine.run("report_generation_echoprime", dataset_dir="datasets/example_study_echoprime")

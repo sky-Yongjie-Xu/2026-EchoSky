@@ -35,6 +35,8 @@ class CardiacEchoEngine:
             "modules.functional_analysis.lv_ef_prediction_dynamic",
             "modules.measurement.b_mode_linear_measurement",
             "modules.measurement.doppler_measurement",
+            "modules.measurement.doppler_mv_ea_measurement",
+            "modules.measurement.doppler_tapse_measurement",
             "modules.report_generation.report_generation_echoprime",
 
 

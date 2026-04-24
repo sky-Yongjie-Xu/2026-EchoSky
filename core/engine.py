@@ -30,14 +30,16 @@ class CardiacEchoEngine:
     def _discover_modules(self):
         """自动发现并注册所有功能模块"""
         module_paths = [
+            "modules.classification.view_classification_echoprime",
             "modules.segmentation.lv_segmentation_dynamic",
             "modules.functional_analysis.lv_ef_prediction_dynamic",
-            "modules.classification.view_classification_echoprime",
+            "modules.measurement.b_mode_linear_measurement",
+            "modules.measurement.doppler_measurement",
             "modules.report_generation.report_generation_echoprime",
 
-            
-            "modules.measurement.plax_hypertrophy_inference",
-            "modules.disease_classification.a4c_classification_inference",
+
+            # "modules.measurement.plax_hypertrophy_inference",
+            # "modules.disease_classification.a4c_classification_inference",
         ]
 
         for path in module_paths:

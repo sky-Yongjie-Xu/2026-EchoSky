@@ -9,8 +9,14 @@ if __name__ == "__main__":
     #### 心脏视角分类
     # engine.run("view_classification_echoprime", dataset_dir="datasets/example_study_echoprime", visualize=True)
 
+    #### 胸骨旁视图分类
+    engine.run("subcostal_view_classification", dataset="datasets/example_study_dynamic", manifest_path="datasets/manifest_step_1_and_2.csv")
+
+    #### 质量控制
+    # engine.run("subcostal_quality_control", dataset="datasets/example_study_dynamic", manifest_path="datasets/manifest_step_1_and_2.csv")
+
     #### 左心室 分割
-    engine.run("lv_segmentation_dynamic", save_video=True)
+    # engine.run("lv_segmentation_dynamic", save_video=True)
 
     #### 左心室 射血分数预测
     # engine.run("lv_ef_prediction_dynamic")

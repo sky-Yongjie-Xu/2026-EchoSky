@@ -31,6 +31,8 @@ class CardiacEchoEngine:
         """自动发现并注册所有功能模块"""
         module_paths = [
             "modules.classification.view_classification_echoprime",
+            "modules.classification.subcostal_view_classification",
+            "modules.quality_control.subcostal_quality_control",
             "modules.segmentation.lv_segmentation_dynamic",
             "modules.functional_analysis.lv_ef_prediction_dynamic",
             "modules.measurement.b_mode_linear_measurement",

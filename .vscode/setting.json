@@ -1,0 +1,4 @@
+{
+    "python.defaultInterpreterPath": "/root/anaconda3/envs/sky/bin/python",
+    "python.condaPath": "/root/anaconda3/bin/conda"
+}

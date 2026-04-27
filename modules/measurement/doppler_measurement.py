@@ -12,7 +12,10 @@ import click
 from torchvision.models.segmentation import deeplabv3_resnet50
 
 # Local module imports
-from utils import (
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from modules.measurement.utils import (
     get_coordinates_from_dicom,
     ybr_to_rgb
 )

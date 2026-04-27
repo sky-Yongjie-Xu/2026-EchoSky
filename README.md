@@ -9,6 +9,8 @@
 | 模块 | 功能描述 | 模型架构 |
 |------|----------|----------|
 | **视角分类** | 自动识别超声切面类型（A2C, A3C, A4C, A5C, PLAX, PSAX等11种） | ConvNeXt-Base |
+| **Subcostal视图分类** | 肋下视图分类（高质量筛选 Step1） | R(2+1)D-18 |
+| **质量控制** | Subcostal图像质量控制（高质量筛选 Step2） | R(2+1)D-18 |
 | **左心室分割** | 对左心室进行像素级分割，支持训练、测试和视频生成 | DeepLabV3+/FCN |
 | **射血分数预测** | 预测左心室射血分数（LVEF），支持多clip推理 | R(2+1)D-18 |
 | **报告生成** | 基于EchoPrime架构，自动生成结构化超声报告（支持中英文） | MViT-V2 + ConvNeXt |
@@ -16,6 +18,7 @@
 | **多普勒峰值速度测量** | 多普勒超声峰值速度测量（AVVmax, TRVmax, MRVmax, LVOTVmax等） | DeepLabV3-ResNet50 |
 | **二尖瓣E/A测量** | 二尖瓣血流多普勒 E峰/A峰 速度测量及E/A比值计算 | DeepLabV3-ResNet50 |
 | **TAPSE测量** | 三尖瓣环收缩期位移（TAPSE）测量，评估右心室功能 | DeepLabV3-ResNet50 |
+| **肝脏疾病预测** | 基于超声图像预测肝脏疾病（肝硬化/脂肪肝） | DenseNet-121 |
 | **PLAX自动测量** | 在PLAX视角下自动测量LVPW、LVID、IVS等指标 | DeepLabV3-ResNet50 |
 | **疾病分类** | A4C视角下的淀粉样变性二分类 | R3D-18 |
 
@@ -34,8 +37,9 @@ EchoSky/
 ├── data/
 │   └── echo.py                      # EchoNet-Dynamic 数据集加载器
 ├── modules/
-│   ├── classification/              # 视角分类模块
-│   │   ├── view_classification_echoprime.py
+│   ├── view_classification/         # 视角分类模块
+│   │   ├── view_classification_echoprime.py    # EchoPrime视角分类
+│   │   ├── subcostal_view_classification.py    # Subcostal视图分类
 │   │   └── utils.py
 │   ├── segmentation/                # 左心室分割模块
 │   │   └── lv_segmentation_dynamic.py
@@ -45,14 +49,19 @@ EchoSky/
 │   │   ├── report_generation_echoprime.py
 │   │   └── utils.py
 │   ├── measurement/                 # 自动测量模块
-│   │   ├── b_mode_linear_measurement.py    # B模式2D结构测量
-│   │   ├── doppler_measurement.py          # 多普勒峰值速度测量
-│   │   ├── doppler_mv_ea_measurement.py    # 二尖瓣E/A测量
-│   │   ├── doppler_tapse_measurement.py    # TAPSE测量
-│   │   ├── plax_hypertrophy_inference.py   # PLAX测量（待启用）
+│   │   ├── b_mode_linear_measurement.py      # B模式2D结构测量
+│   │   ├── doppler_measurement.py            # 多普勒峰值速度测量
+│   │   ├── doppler_mv_ea_measurement.py      # 二尖瓣E/A测量
+│   │   ├── doppler_tapse_measurement.py      # TAPSE测量
+│   │   ├── plax_hypertrophy_inference.py     # PLAX测量（待启用）
 │   │   └── utils.py
 │   ├── disease_classification/      # 疾病分类模块
-│   │   └── a4c_classification_inference.py  # 淀粉样变分类（待启用）
+│   │   ├── liver_disease_prediction.py       # 肝脏疾病预测
+│   │   ├── a4c_classification_inference.py   # 淀粉样变分类（待启用）
+│   │   └── utils.py
+│   ├── quality_control/             # 质量控制模块
+│   │   ├── subcostal_quality_control.py      # Subcostal质量控制
+│   │   └── utils.py
 │   └── landmark_detection/          # 地标检测模块（待开发）
 ├── configs/
 │   └── train_config.yaml            # 训练配置文件
@@ -106,6 +115,15 @@ engine.run("lv_segmentation_dynamic", save_video=True)
 
 # 视角分类
 engine.run("view_classification_echoprime", dataset_dir="path/to/dicom/folder", visualize=True)
+
+# Subcostal视图分类（高质量筛选 Step1）
+engine.run("subcostal_view_classification", dataset="path/to/dataset", manifest_path="path/to/manifest.csv")
+
+# 质量控制（高质量筛选 Step2）
+engine.run("subcostal_quality_control", dataset="path/to/dataset", manifest_path="path/to/manifest.csv")
+
+# 肝脏疾病预测（支持肝硬化/脂肪肝）
+engine.run("liver_disease_prediction", dataset="path/to/dataset", manifest_path="path/to/manifest.csv", label="cirrhosis")
 
 # 射血分数预测
 engine.run("lv_ef_prediction_dynamic")
@@ -203,7 +221,27 @@ training:
   - 每个帧的左心室面积曲线
 - **评估指标**: Dice系数（整体、舒张期、收缩期）
 
-### 3. 射血分数预测 (EF Prediction)
+### 3. Subcostal视图分类 (Subcostal View Classification)
+
+- **输入**: 数据集路径和manifest文件
+- **输出**: CSV文件（包含预测结果，筛选出高质量Subcostal视图）
+- **临床意义**: 高质量筛选流程的第一步（Step1）
+- **使用示例**:
+  ```python
+  engine.run("subcostal_view_classification", dataset="path/to/dataset", manifest_path="path/to/manifest.csv")
+  ```
+
+### 4. 质量控制 (Quality Control)
+
+- **输入**: 数据集路径和manifest文件
+- **输出**: CSV文件（包含质量控制评分，筛选出高质量图像）
+- **临床意义**: 高质量筛选流程的第二步（Step2）
+- **使用示例**:
+  ```python
+  engine.run("subcostal_quality_control", dataset="path/to/dataset", manifest_path="path/to/manifest.csv")
+  ```
+
+### 5. 射血分数预测 (EF Prediction)
 
 - **输入**: EchoNet-Dynamic格式数据集
 - **输出**:
@@ -212,14 +250,14 @@ training:
   - R²、MAE、RMSE等评估指标
 - **支持多clip推理**，自动聚合预测结果
 
-### 4. 报告生成 (Report Generation)
+### 6. 报告生成 (Report Generation)
 
 - **输入**: DICOM视频文件夹
 - **输出**: 结构化文本报告
 - **支持语言**: 中文(zh) / 英文(en)
 - **报告章节**: 左心室、右心室、左心房、右心房、瓣膜等
 
-### 5. B模式线性测量 (B-Mode Linear Measurement)
+### 7. B模式线性测量 (B-Mode Linear Measurement)
 
 - **输入**: 视频文件夹（.avi 或 .dcm 格式）
 - **输出**:
@@ -240,7 +278,7 @@ training:
   engine.run("b_mode_linear_measurement", model_weights="aorta", folders="path/to/videos", output_path_folders="output/measurement")
   ```
 
-### 6. 多普勒峰值速度测量 (Doppler Peak Velocity Measurement)
+### 8. 多普勒峰值速度测量 (Doppler Peak Velocity Measurement)
 
 - **输入**: DICOM多普勒图像文件夹
 - **输出**:
@@ -258,7 +296,7 @@ training:
   engine.run("doppler_measurement", model_weights="avvmax", folders="path/to/videos", output_path_folders="output/doppler")
   ```
 
-### 7. 二尖瓣E/A测量 (Mitral Valve E/A Measurement)
+### 9. 二尖瓣E/A测量 (Mitral Valve E/A Measurement)
 
 - **输入**: DICOM二尖瓣血流多普勒图像文件夹
 - **输出**:
@@ -274,7 +312,7 @@ training:
   engine.run("doppler_mv_ea_measurement", folders="path/to/videos", output_path_folders="output/mv_ea")
   ```
 
-### 8. TAPSE测量 (Tricuspid Annular Plane Systolic Excursion)
+### 10. TAPSE测量 (Tricuspid Annular Plane Systolic Excursion)
 
 - **输入**: DICOM三尖瓣多普勒图像文件夹
 - **输出**:
@@ -288,7 +326,7 @@ training:
   engine.run("doppler_tapse_measurement", folders="path/to/videos", output_path_folders="output/tapse")
   ```
 
-### 9. PLAX自动测量 (PLAX Measurement) ⚠️ 待启用
+### 11. PLAX自动测量 (PLAX Measurement) ⚠️ 待启用
 
 - **输入**: PLAX视角视频文件夹
 - **输出**:
@@ -297,7 +335,20 @@ training:
   - 测量曲线图
 - **测量指标**: LVPW（左室后壁厚度）、LVID（左室内径）、IVS（室间隔厚度）
 
-### 10. 疾病分类 (Disease Classification) ⚠️ 待启用
+### 12. 肝脏疾病预测 (Liver Disease Prediction)
+
+- **输入**: 数据集路径和manifest文件
+- **输出**: CSV文件（包含预测结果）
+- **支持疾病**:
+  - **Cirrhosis**: 肝硬化预测
+  - **SLD**: 脂肪肝（Steatotic Liver Disease）预测
+- **模型架构**: DenseNet-121
+- **使用示例**:
+  ```python
+  engine.run("liver_disease_prediction", dataset="path/to/dataset", manifest_path="path/to/manifest.csv", label="cirrhosis")
+  ```
+
+### 13. 疾病分类 (Disease Classification) ⚠️ 待启用
 
 - **输入**: A4C视角视频文件夹
 - **输出**: CSV文件（包含每个视频的阳性置信度）

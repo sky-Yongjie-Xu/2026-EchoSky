@@ -8,6 +8,9 @@ import click
 from torch.utils.data import DataLoader
 from torchvision.models.video import r2plus1d_18
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from modules.quality_control.utils import EchoDataset, sigmoid
 
 # ==============================================
@@ -63,7 +66,7 @@ def run_pipeline(dataset, manifest_path, output_csv=None):
     out_above = out[out.preds > 0.925]
 
     if not output_csv:
-        output_csv = os.path.join(os.getcwd(), "quality_control_predictions_above_threshold.csv")
+        output_csv = os.path.join(os.getcwd(), "modules/quality_control/outputs/subcostal_quality_control_predictions_above_threshold.csv")
 
     out_above.to_csv(output_csv, index=False)
     print(f"[✅] 输出：{output_csv}")

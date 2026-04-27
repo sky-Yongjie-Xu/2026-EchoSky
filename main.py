@@ -10,10 +10,13 @@ if __name__ == "__main__":
     # engine.run("view_classification_echoprime", dataset_dir="datasets/example_study_echoprime", visualize=True)
 
     #### 胸骨旁视图分类
-    engine.run("subcostal_view_classification", dataset="datasets/example_study_dynamic", manifest_path="datasets/manifest_step_1_and_2.csv")
+    # engine.run("subcostal_view_classification", dataset="datasets/example_study_dynamic", manifest_path="datasets/manifest_step_1_and_2.csv")
 
     #### 质量控制
     # engine.run("subcostal_quality_control", dataset="datasets/example_study_dynamic", manifest_path="datasets/manifest_step_1_and_2.csv")
+
+    #### liver_disease_prediction
+    # engine.run("liver_disease_prediction", dataset="datasets/example_study_dynamic", manifest_path="datasets/manifest.csv", label="cirrhosis")
 
     #### 左心室 分割
     # engine.run("lv_segmentation_dynamic", save_video=True)

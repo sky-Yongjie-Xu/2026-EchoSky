@@ -18,9 +18,12 @@ class CardiacEchoEngine:
         module_dirs = [
             "modules/segmentation",
             "modules/functional_analysis",
-            "modules/classification",
-            "modules/measurement",
+            "modules/view_classification",
             "modules/disease_classification",
+            "modules/quality_control",
+            "modules/measurement",
+            "modules/report_generation",
+            "modules/landmark_detection",
         ]
         for d in module_dirs:
             p = os.path.join(base, d)
@@ -30,9 +33,10 @@ class CardiacEchoEngine:
     def _discover_modules(self):
         """自动发现并注册所有功能模块"""
         module_paths = [
-            "modules.classification.view_classification_echoprime",
-            "modules.classification.subcostal_view_classification",
+            "modules.view_classification.view_classification_echoprime",
+            "modules.view_classification.subcostal_view_classification",
             "modules.quality_control.subcostal_quality_control",
+            "modules.disease_classification.liver_disease_prediction",
             "modules.segmentation.lv_segmentation_dynamic",
             "modules.functional_analysis.lv_ef_prediction_dynamic",
             "modules.measurement.b_mode_linear_measurement",

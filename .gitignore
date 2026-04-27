@@ -4,3 +4,4 @@ outputs/
 assets
 datasets
 modules/report_generation/candidates_data
+modules/report_generation/medgemma-1.5-4b-it

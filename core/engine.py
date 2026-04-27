@@ -6,7 +6,7 @@ from importlib import import_module
 class CardiacEchoEngine:
     def __init__(self):
         self.modules = {}
-        self._fix_module_imports()  # ✅ 先修复导入
+        self._fix_module_imports()
         self._discover_modules()
 
     def _fix_module_imports(self):
@@ -25,6 +25,7 @@ class CardiacEchoEngine:
             "modules/report_generation",
             "modules/landmark_detection",
             "modules/age_prediction",
+            "modules/visual_question_answering",
         ]
         for d in module_dirs:
             p = os.path.join(base, d)
@@ -47,6 +48,7 @@ class CardiacEchoEngine:
             "modules.report_generation.report_generation_echoprime",
             "modules.report_generation.report_generation_gemma",
             "modules.age_prediction.age_prediction",
+            "modules.visual_question_answering.visual_question_answering",
 
 
             # "modules.measurement.plax_hypertrophy_inference",

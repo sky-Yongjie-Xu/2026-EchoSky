@@ -11,17 +11,27 @@ import pydicom
 import cv2
 import torchvision
 import math
+from transformers import pipeline
 
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+bnb_config = BitsAndBytesConfig(
+    load_in_8bit=True,
+    bnb_8bit_use_double_quant=True,
+    bnb_8bit_quant_type="int8"
+)
 
 class EchoGemma(nn.Module):
     def __init__(self,emb_dim=523, device=torch.device('cuda')):
         super().__init__()
-        self.tokenizer = AutoTokenizer.from_pretrained("google/medgemma-1.5-4b-it", use_fast=True)
+        self.tokenizer = AutoTokenizer.from_pretrained("modules/report_generation/medgemma-1.5-4b-it", use_fast=True)
 
         self.medgemma = AutoModelForCausalLM.from_pretrained(
-            "google/medgemma-1.5-4b-it",
-            torch_dtype=torch.float,
-            device_map="cpu"
+            "modules/report_generation/medgemma-1.5-4b-it",
+            # torch_dtype=torch.float, ### 完整模型
+            # device_map="cpu" ### 完整模型
+            device_map="auto",
+            quantization_config=bnb_config,
+            trust_remote_code=True
         )
 
         lora_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
@@ -57,7 +67,7 @@ class EchoGemma(nn.Module):
         self.device=device
     
         # load finetuned weights
-        echogemma_checkpoint = torch.load("echogemma.pt", map_location='cpu')
+        echogemma_checkpoint = torch.load("modules/report_generation/weights/echogemma.pt", map_location='cpu', mmap=True)
         self.load_state_dict(echogemma_checkpoint)
         self.to(device)
         self.eval()
@@ -82,7 +92,8 @@ class EchoGemma(nn.Module):
             try:
                 # simple dicom_processing
                 dcm=pydicom.dcmread(dicom_path)
-                pixels = pydicom.pixels.pixel_array(dcm, raw=True)
+                # pixels = pydicom.pixels.pixel_array(dcm, raw=True)
+                pixels = dcm.pixel_array
                 
                 # exclude images like (600,800) or (600,800,3)
                 if pixels.ndim < 3 or pixels.shape[2]==3:
@@ -166,10 +177,12 @@ class EchoGemma(nn.Module):
 
         # Project visual embeddings
         visual_embs = self.visual_projection(study_embeddings)  # (1, N_videos, 2560)
+        visual_embs = visual_embs.float()
 
         # Encode prompt (includes BOS automatically)
         prompt_ids = self.tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt").to(self.device)
         token_embs = self.medgemma.get_input_embeddings()(prompt_ids)  # (1, T, 2560)
+        token_embs = token_embs.float()
 
         # Combine visual + token embeddings
         inputs_embeds = torch.cat([visual_embs, token_embs], dim=1)
@@ -198,8 +211,14 @@ class EchoGemma(nn.Module):
                 eos_token_id=self.tokenizer.eos_token_id,
             )
         generated_ids = outputs[0].tolist()
-        output = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-        return output
+        english_report = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+        english_report = english_report.split("model\n")[-1].strip()
+
+        # 🔥 第二步：新增中英翻译模块
+        translator = pipeline("translation_en_to_zh", model="Helsinki-NLP/opus-mt-en-zh")
+        chinese_report = translator(english_report, max_length=1024)[0]['translation_text']
+
+        return chinese_report
 
     @staticmethod
     def mask_outside_ultrasound(original_pixels: np.array) -> np.array:

@@ -13,12 +13,15 @@
 | **质量控制** | Subcostal图像质量控制（高质量筛选 Step2） | R(2+1)D-18 |
 | **左心室分割** | 对左心室进行像素级分割，支持训练、测试和视频生成 | DeepLabV3+/FCN |
 | **射血分数预测** | 预测左心室射血分数（LVEF），支持多clip推理 | R(2+1)D-18 |
-| **报告生成** | 基于EchoPrime架构，自动生成结构化超声报告（支持中英文） | MViT-V2 + ConvNeXt |
+| **报告生成（EchoPrime）** | 基于EchoPrime架构，自动生成结构化超声报告（支持中英文） | MViT-V2 + ConvNeXt |
+| **报告生成（EchoGemma）** | 基于Gemma的超声智能报告生成 | Gemma |
 | **B模式线性测量** | 2D结构分割测量（IVS, LVID, LVPW, Aorta, LA, RV, PA, IVC） | DeepLabV3-ResNet50 |
 | **多普勒峰值速度测量** | 多普勒超声峰值速度测量（AVVmax, TRVmax, MRVmax, LVOTVmax等） | DeepLabV3-ResNet50 |
 | **二尖瓣E/A测量** | 二尖瓣血流多普勒 E峰/A峰 速度测量及E/A比值计算 | DeepLabV3-ResNet50 |
 | **TAPSE测量** | 三尖瓣环收缩期位移（TAPSE）测量，评估右心室功能 | DeepLabV3-ResNet50 |
 | **肝脏疾病预测** | 基于超声图像预测肝脏疾病（肝硬化/脂肪肝） | DenseNet-121 |
+| **年龄预测** | 基于超声视频预测年龄 | R(2+1)D-18 |
+| **视觉问答** | 超声视频多选题评估（MedGemma 1.5） | MedGemma-1.5-4B |
 | **PLAX自动测量** | 在PLAX视角下自动测量LVPW、LVID、IVS等指标 | DeepLabV3-ResNet50 |
 | **疾病分类** | A4C视角下的淀粉样变性二分类 | R3D-18 |
 
@@ -46,7 +49,8 @@ EchoSky/
 │   ├── functional_analysis/         # 射血分数预测模块
 │   │   └── lv_ef_prediction_dynamic.py
 │   ├── report_generation/           # 报告生成模块
-│   │   ├── report_generation_echoprime.py
+│   │   ├── report_generation_echoprime.py    # EchoPrime报告生成
+│   │   ├── report_generation_gemma.py        # EchoGemma报告生成
 │   │   └── utils.py
 │   ├── measurement/                 # 自动测量模块
 │   │   ├── b_mode_linear_measurement.py      # B模式2D结构测量
@@ -62,6 +66,11 @@ EchoSky/
 │   ├── quality_control/             # 质量控制模块
 │   │   ├── subcostal_quality_control.py      # Subcostal质量控制
 │   │   └── utils.py
+│   ├── age_prediction/              # 年龄预测模块
+│   │   ├── age_prediction.py                 # 超声年龄预测
+│   │   └── utils.py
+│   ├── visual_question_answering/   # 视觉问答模块
+│   │   └── visual_question_answering.py      # MedGemma VQA评估
 │   └── landmark_detection/          # 地标检测模块（待开发）
 ├── configs/
 │   └── train_config.yaml            # 训练配置文件
@@ -140,8 +149,17 @@ engine.run("doppler_mv_ea_measurement", folders="path/to/videos", output_path_fo
 # TAPSE测量（三尖瓣环收缩期位移，评估右心室功能）
 engine.run("doppler_tapse_measurement", folders="path/to/videos", output_path_folders="output/tapse")
 
-# 报告生成（支持中英文）
+# 报告生成（EchoPrime，支持中英文）
 engine.run("report_generation_echoprime", dataset_dir="path/to/dicom/folder")
+
+# 报告生成（EchoGemma，基于Gemma的智能报告）
+engine.run("report_generation_gemma", dicom_dir="path/to/dicom/folder", save_path="output/report_gemma.txt")
+
+# 年龄预测（基于超声视频）
+engine.run("age_prediction", target="Age", manifest_path="path/to/manifest.csv", path_column="video_path", weights_path="path/to/weights.pt", save_path="output/predictions.csv")
+
+# 视觉问答（MedGemma 1.5 多选题评估）
+engine.run("visual_question_answering", dataset_dir="path/to/dataset", manifest_path="path/to/manifest.csv", output_path="output/vqa_results.json")
 
 # PLAX自动测量（待启用）
 # engine.run("plax_inference", in_dir="path/to/videos", out_dir="output/plax")

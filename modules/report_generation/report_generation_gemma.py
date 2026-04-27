@@ -42,7 +42,7 @@ def run_pipeline(
 # ==============================================
 # 命令行接口（和你框架统一）
 # ==============================================
-@click.command("echogemma")
+@click.command("report_generation_gemma")
 @click.option("--dicom_dir", type=str, required=True, help="DICOM 文件夹路径")
 @click.option("--save_path", type=str, required=True, help="报告保存路径 .txt")
 def run(dicom_dir, save_path):
@@ -57,7 +57,7 @@ def run(dicom_dir, save_path):
 # ==============================================
 def register():
     return {
-        "name": "echogemma",
+        "name": "report_generation_gemma",
         "entry": run,
         "description": "EchoGemma 超声智能报告生成"
     }

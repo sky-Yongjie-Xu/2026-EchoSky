@@ -13,10 +13,10 @@ import torch
 import torchvision
 import tqdm
 
-import modules.segmentation.echonet
+import echonet
 
 
-@click.command("lv_segmentation_dynamic")
+@click.command("segmentation")
 @click.option("--data_dir", type=click.Path(exists=True, file_okay=False), default=None)
 @click.option("--output", type=click.Path(file_okay=False), default=None)
 @click.option("--model_name", type=click.Choice(
@@ -103,7 +103,7 @@ def run(
 
     # Set default output directory
     if output is None:
-        output = os.path.join("modules/segmentation/output", "segmentation", "{}_{}".format(model_name, "pretrained" if pretrained else "random"))
+        output = os.path.join("output", "segmentation", "{}_{}".format(model_name, "pretrained" if pretrained else "random"))
     os.makedirs(output, exist_ok=True)
 
     # Set device for computations
@@ -496,18 +496,3 @@ def _video_collate_fn(x):
     target = zip(*target)
 
     return video, target, i
-
-
-def register():
-    """
-    模块注册接口：用于主引擎动态加载
-    你的主程序可以通过这个函数自动识别模块、调用run()
-    """
-    return {
-        "name": "lv_segmentation_dynamic",
-        "entry": run,
-        "description": "左心室分割（训练/测试/推理/视频生成）"
-    }
-
-if __name__ == "__main__":
-    run()

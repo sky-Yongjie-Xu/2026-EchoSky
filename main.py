@@ -36,13 +36,17 @@ if __name__ == "__main__":
     # engine.run("report_generation_echoprime", dataset_dir="datasets/example_study_echoprime")
 
     #### 心脏结构化报告生成
-    engine.run("report_generation_gemma", dicom_dir="datasets/example_study_echoprime", save_path="modules/report_generation/outputs/report_gemma.txt")
+    # engine.run("report_generation_gemma", dicom_dir="datasets/example_study_echoprime", save_path="modules/report_generation/outputs/report_gemma.txt")
     
     #### 超声年龄预测（视频）
     # engine.run("age_prediction", target="Age", manifest_path="datasets/manifest_age.csv", path_column="video_path", weights_path="modules/age_prediction/weights/a2c_model_best_epoch_val_mae.pt", save_path="modules/age_prediction/outputs/predictions.csv")
 
     #### 视觉问答
-    # engine.run("visual_question_answering", dataset_dir="datasets/example_study_echoprime", manifest_path="datasets/manifest_vqa.csv", output_path="modules/visual_question_answering/outputs/vqa_predictions.csv")
+    engine.run("visual_question_answering", media="datasets/example_study_dynamic/0X1A0A263B22CCD966.avi")
+    # engine.run("visual_question_answering_echo", media="datasets/example_study_dynamic/0X1A0A263B22CCD966.avi")
+
+
+
 
     ###################### 计划开发功能（敬请期待） ######################
 

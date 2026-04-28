@@ -49,6 +49,7 @@ class CardiacEchoEngine:
             "modules.report_generation.report_generation_gemma",
             "modules.age_prediction.age_prediction",
             "modules.visual_question_answering.visual_question_answering",
+            "modules.visual_question_answering.visual_question_answering_echo",
 
 
             # "modules.measurement.plax_hypertrophy_inference",

@@ -11,15 +11,7 @@ import pydicom
 import cv2
 import torchvision
 import math
-from transformers import pipeline
 
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-bnb_config = BitsAndBytesConfig(
-    load_in_8bit=True,
-    bnb_8bit_use_double_quant=True,
-    bnb_8bit_quant_type="int8"
-)
-model_dtype = torch.float16
 
 class EchoGemma(nn.Module):
     def __init__(self,emb_dim=523, device=torch.device('cuda')):
@@ -28,10 +20,8 @@ class EchoGemma(nn.Module):
 
         self.medgemma = AutoModelForCausalLM.from_pretrained(
             "modules/report_generation/medgemma-1.5-4b-it",
-            device_map="auto",
-            quantization_config=bnb_config,
-            trust_remote_code=True,
-            dtype=model_dtype
+            torch_dtype=torch.float,
+            device_map="cpu"
         )
 
         lora_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
@@ -56,20 +46,20 @@ class EchoGemma(nn.Module):
         )
     
         # project EchoPrime embeddings to 2560 so that they can be merged
-        self.visual_projection = torch.nn.Linear(emb_dim, 2560, dtype=torch.float16)
+        self.visual_projection = torch.nn.Linear(emb_dim, 2560, dtype=torch.float)
 
         # video parameters
         self.frames_to_take=32
         self.frame_stride=2
         self.video_size=224
-        self.mean = torch.tensor([29.110628, 28.076836, 29.096405]).reshape(3, 1, 1, 1).half()
-        self.std = torch.tensor([47.989223, 46.456997, 47.20083]).reshape(3, 1, 1, 1).half()
+        self.mean = torch.tensor([29.110628, 28.076836, 29.096405]).reshape(3, 1, 1, 1)
+        self.std = torch.tensor([47.989223, 46.456997, 47.20083]).reshape(3, 1, 1, 1)
         self.device=device
     
         # load finetuned weights
-        echogemma_checkpoint = torch.load("modules/report_generation/weights/echogemma.pt", map_location='cpu', mmap=True)
+        echogemma_checkpoint = torch.load("modules/report_generation/weights/echogemma.pt", map_location='cpu')
         self.load_state_dict(echogemma_checkpoint)
-        self.to(device).half()
+        self.to(device)
         self.eval()
 
     def process_dicoms(self,INPUT):
@@ -92,7 +82,7 @@ class EchoGemma(nn.Module):
             try:
                 # simple dicom_processing
                 dcm=pydicom.dcmread(dicom_path)
-                pixels = dcm.pixel_array
+                pixels = pydicom.pixels.pixel_array(dcm, raw=True)
                 
                 # exclude images like (600,800) or (600,800,3)
                 if pixels.ndim < 3 or pixels.shape[2]==3:
@@ -112,8 +102,7 @@ class EchoGemma(nn.Module):
                 for i in range(len(x)):
                     x[i] = self.crop_and_scale(pixels[i])
                 
-                x = torch.as_tensor(x, dtype=torch.float16).permute([3,0,1,2])
-
+                x = torch.as_tensor(x, dtype=torch.float).permute([3,0,1,2])
                 # normalize
                 x.sub_(self.mean).div_(self.std)
             
@@ -173,7 +162,7 @@ class EchoGemma(nn.Module):
         # Concat
         study_embeddings = torch.cat( (stack_of_features ,stack_of_view_encodings),dim=1)
         study_embeddings = study_embeddings.to(self.device)
-        study_embeddings = study_embeddings.unsqueeze(0).half()
+        study_embeddings = study_embeddings.unsqueeze(0)
 
         # Project visual embeddings
         visual_embs = self.visual_projection(study_embeddings)  # (1, N_videos, 2560)
@@ -209,14 +198,8 @@ class EchoGemma(nn.Module):
                 eos_token_id=self.tokenizer.eos_token_id,
             )
         generated_ids = outputs[0].tolist()
-        english_report = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-        english_report = english_report.split("model\n")[-1].strip()
-
-        # 🔥 第二步：新增中英翻译模块
-        translator = pipeline("translation_en_to_zh", model="Helsinki-NLP/opus-mt-en-zh")
-        chinese_report = translator(english_report, max_length=1024)[0]['translation_text']
-
-        return chinese_report
+        output = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+        return output
 
     @staticmethod
     def mask_outside_ultrasound(original_pixels: np.array) -> np.array:

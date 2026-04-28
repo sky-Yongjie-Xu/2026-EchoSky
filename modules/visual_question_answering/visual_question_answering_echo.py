@@ -12,6 +12,7 @@ import numpy as np
 import pydicom
 from pathlib import Path
 from tqdm import tqdm
+from PIL import Image
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -19,8 +20,13 @@ from transformers import (
 )
 from peft import LoraConfig, get_peft_model, TaskType
 
-# 自动加入项目根目录，确保导入正常
+# 自动加入项目根目录
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# ====================== 显存优化 ======================
+torch.backends.cudnn.enabled = True
+torch.backends.cudnn.benchmark = True
+os.environ["TOKENIZER_PARALLELISM"] = "false"
 
 # ====================== 量化配置 ======================
 bnb_config = BitsAndBytesConfig(
@@ -28,240 +34,227 @@ bnb_config = BitsAndBytesConfig(
     bnb_8bit_use_double_quant=True,
     bnb_8bit_quant_type="int8"
 )
-model_dtype = torch.float16
+model_dtype = torch.bfloat16
 
-# ====================== EchoGemma 模型类 ======================
+# 全局模型缓存
+_MODEL_CACHE = {}
+
+# ====================== EchoGemma 模型 ======================
 class EchoGemmaVQA(nn.Module):
-    def __init__(self, emb_dim=512, device=torch.device('cuda')):
+    def __init__(self, model_id="modules/report_generation/medgemma-1.5-4b-it", 
+                 weight_path="modules/report_generation/weights/echogemma.pt",
+                 emb_dim=512, device=torch.device('cuda')):
         super().__init__()
         self.device = device
+        self.model_id = model_id
+        self.weight_path = weight_path
 
-        # ---------- Tokenizer & MedGemma ----------
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            "modules/report_generation/medgemma-1.5-4b-it", use_fast=True
-        )
+        # Tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, use_fast=True)
         self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.padding_side = "left"
 
+        # 大模型
         self.medgemma = AutoModelForCausalLM.from_pretrained(
-            "modules/report_generation/medgemma-1.5-4b-it",
+            self.model_id,
             device_map="auto",
             quantization_config=bnb_config,
             trust_remote_code=True,
-            dtype=model_dtype
+            torch_dtype=model_dtype
         )
 
         # LoRA
-        lora_target_modules = [
-            "q_proj", "k_proj", "v_proj", "o_proj",
-            "gate_proj", "up_proj", "down_proj"
-        ]
         lora_config = LoraConfig(
-            r=16,
-            lora_alpha=32,
-            target_modules=lora_target_modules,
-            lora_dropout=0.05,
-            bias="none",
-            task_type=TaskType.CAUSAL_LM
+            r=16, lora_alpha=32,
+            target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+            lora_dropout=0.05, bias="none", task_type=TaskType.CAUSAL_LM
         )
         self.medgemma = get_peft_model(self.medgemma, lora_config)
+        self.medgemma.eval()
 
-        # ---------- 视频编码器 ----------
+        # 视频编码器
         self.echo_encoder = torchvision.models.video.mvit_v2_s()
-        self.echo_encoder.head[-1] = nn.Linear(
-            self.echo_encoder.head[-1].in_features, 512
-        )
+        self.echo_encoder.head[-1] = nn.Linear(self.echo_encoder.head[-1].in_features, emb_dim)
 
-        # ---------- 视图分类器 ----------
+        # 视图分类
         self.view_classifier = torchvision.models.convnext_base()
-        self.view_classifier.classifier[-1] = nn.Linear(
-            self.view_classifier.classifier[-1].in_features, 11
-        )
+        self.view_classifier.classifier[-1] = nn.Linear(self.view_classifier.classifier[-1].in_features, 11)
 
-        # ---------- 投影层 ----------
-        self.visual_projection = nn.Linear(emb_dim + 11, 2560, dtype=torch.float16)
+        # 投影层
+        self.visual_projection = nn.Linear(emb_dim + 11, 2560, dtype=model_dtype)
 
-        # ---------- 视频预处理 ----------
+        # 视频预处理
         self.frames_to_take = 16
         self.frame_stride = 2
         self.video_size = 224
-        self.mean = torch.tensor([29.1106, 28.0768, 29.0964]).reshape(3,1,1,1).half().to(self.device)
-        self.std = torch.tensor([47.9892, 46.4570, 47.2008]).reshape(3,1,1,1).half().to(self.device)
+        self.mean = torch.tensor([29.1106, 28.0768, 29.0964]).reshape(3,1,1,1).to(self.device)
+        self.std = torch.tensor([47.9892, 46.4570, 47.2008]).reshape(3,1,1,1).to(self.device)
 
-        # ---------- 加载权重 ----------
-        checkpoint = torch.load(
-            "modules/report_generation/weights/echogemma.pt",
-            map_location="cpu"
-        )
-        self.load_state_dict(checkpoint, strict=False)
-        self.to(device).half()
-        self.eval()
+        # 加载权重
+        self._load_weights()
 
-    # ====================== 处理视频（支持普通视频 + DICOM） ======================
-    def process_video_folder(self, video_dir):
-        video_paths = glob.glob(f"{video_dir}/**/*.mp4", recursive=True) + \
-                      glob.glob(f"{video_dir}/**/*.avi", recursive=True) + \
-                      glob.glob(f"{video_dir}/**/*.dcm", recursive=True)
+        # 推理模式
+        self.to(self.device).to(model_dtype).eval()
+        for p in self.parameters():
+            p.requires_grad_(False)
 
-        videos = []
-        for path in tqdm(video_paths, desc="Processing videos"):
-            try:
-                if path.endswith(".dcm"):
-                    video = self._load_dicom(path)
-                else:
-                    video = self._load_video(path)
+    def _load_weights(self):
+        if not Path(self.weight_path).exists():
+            print(f"⚠️  未找到权重：{self.weight_path}")
+            return
+        try:
+            checkpoint = torch.load(self.weight_path, map_location="cpu")
+            self.load_state_dict(checkpoint, strict=False)
+            print("✅ 权重加载完成")
+        except:
+            print("❌ 权重加载失败")
 
-                if video is None:
-                    continue
+    # ====================== 媒体加载 ======================
+    def load_media_auto(self, path):
+        return self._load_single_media(path)
 
-                videos.append(video)
-            except Exception as e:
-                print(f"Skip {path}: {e}")
-
-        if not videos:
-            raise ValueError("No valid videos found")
-
-        return torch.stack(videos).to(self.device)
+    def _load_single_media(self, file_path):
+        if file_path.endswith(".dcm"):
+            video = self._load_dicom(file_path)
+        else:
+            video = self._load_video(file_path)
+        return video.unsqueeze(0).to(self.device)
 
     def _load_video(self, path):
         cap = cv2.VideoCapture(path)
         frames = []
         while len(frames) < self.frames_to_take:
             ret, f = cap.read()
-            if not ret:
-                break
+            if not ret: break
             f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
             f = self.crop_and_scale(f)
             frames.append(f)
         cap.release()
 
-        if len(frames) == 0:
-            return None
-
-        x = np.array(frames, dtype=np.float16)
-        x = torch.from_numpy(x).permute(3,0,1,2)
+        x = torch.from_numpy(np.array(frames, np.float32)).permute(3,0,1,2)
         x = x[:, ::self.frame_stride][:, :self.frames_to_take]
-        x = (x.half() - self.mean.squeeze()) / self.std.squeeze()
-
+        x = (x - self.mean) / self.std
         if x.shape[1] < self.frames_to_take:
-            pad = torch.zeros(3, self.frames_to_take - x.shape[1], 224,224, dtype=torch.half)
+            pad = torch.zeros(3, self.frames_to_take-x.shape[1], 224,224, dtype=model_dtype)
             x = torch.cat([x, pad], dim=1)
-        return x
+        return x.to(model_dtype)
 
     def _load_dicom(self, path):
-        dcm = pydicom.dcmread(path)
-        pixels = dcm.pixel_array
+        pixels = pydicom.dcmread(path).pixel_array
         if pixels.ndim == 3:
-            pixels = np.repeat(pixels[..., None], 3, axis=3)
+            pixels = np.repeat(pixels[..., None], 3, axis=-1)
 
-        pixels = self.mask_outside_ultrasound(pixels)
-        x = np.zeros((len(pixels), 224,224,3), dtype=np.float16)
-        for i in range(len(x)):
-            x[i] = self.crop_and_scale(pixels[i])
-
+        x = np.stack([self.crop_and_scale(f) for f in pixels])
         x = torch.from_numpy(x).permute(3,0,1,2)
         x = x[:, ::self.frame_stride][:, :self.frames_to_take]
-        x.sub_(self.mean).div_(self.std)
-
+        x = (x - self.mean) / self.std
         if x.shape[1] < self.frames_to_take:
-            pad = torch.zeros(3, self.frames_to_take - x.shape[1], 224,224, dtype=torch.half)
-            x = torch.cat([x, pad], dim=1)
-        return x
+            pad = torch.zeros(3, self.frames_to_take-x.shape[1],224,224,dtype=model_dtype)
+            x = torch.cat([x,pad],dim=1)
+        return x.to(model_dtype)
 
     # ====================== 视觉特征 ======================
     @torch.no_grad()
     def get_visual_embeds(self, video_tensor):
-        feat = self.echo_encoder(video_tensor)
-        feat = F.normalize(feat, dim=-1)
-        first_frame = video_tensor[:, :, 0, :, :]
-        view_logits = self.view_classifier(first_frame)
-        view_onehot = F.one_hot(torch.argmax(view_logits, dim=1), 11).float()
-        concat = torch.cat([feat, view_onehot], dim=1).half()
-        return self.visual_projection(concat)
+        video_tensor = video_tensor.to(self.device, model_dtype)
+        feat = F.normalize(self.echo_encoder(video_tensor), dim=-1)
+        view = self.view_classifier(video_tensor[:,:,0])
+        view = F.one_hot(view.argmax(1),11).to(model_dtype)
+        return self.visual_projection(torch.cat([feat,view],1)).unsqueeze(1)
 
-    # ====================== 生成报告 ======================
+    # ====================== 核心问答 ======================
     @torch.no_grad()
-    def generate_report(self, video_tensor, prompt="Please generate a complete echocardiogram report."):
+    def chat(self, video_tensor, user_input, chat_history):
+        system = "你是专业心脏超声医师，用中文严谨回答，禁止英文，术语规范。\n问题："
+        prompt = system + user_input
+        chat_history = chat_history[-4:]
+
+        hist = []
+        for turn in chat_history:
+            if turn["role"] == "user":
+                hist.append(f"<start_of_turn>user\n{turn['content']}<end_of_turn>")
+            else:
+                hist.append(f"<start_of_turn>model\n{turn['content']}<end_of_turn>")
+
+        full = f"{''.join(hist)}<start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n"
         visual = self.get_visual_embeds(video_tensor)
-
-        prompt_full = f"<start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n"
-        tokens = self.tokenizer.encode(
-            prompt_full, add_special_tokens=True, return_tensors="pt"
-        ).to(self.device)
-
+        tokens = self.tokenizer.encode(full, return_tensors="pt").to(self.device)
         text_embeds = self.medgemma.get_input_embeddings()(tokens)
         embeds = torch.cat([visual, text_embeds], dim=1)
         mask = torch.ones(1, embeds.shape[1], device=self.device)
 
-        outputs = self.medgemma.generate(
-            inputs_embeds=embeds,
-            attention_mask=mask,
-            max_new_tokens=1024,
-            temperature=0.1,
-            do_sample=True,
-            pad_token_id=self.tokenizer.pad_token_id,
-            eos_token_id=self.tokenizer.eos_token_id
+        out = self.medgemma.generate(
+            inputs_embeds=embeds, attention_mask=mask,
+            max_new_tokens=768, temperature=0.2, do_sample=True,
+            pad_token_id=self.tokenizer.pad_token_id, eos_token_id=self.tokenizer.eos_token_id
         )
 
-        return self.tokenizer.decode(outputs[0], skip_special_tokens=True).split("model\n")[-1].strip()
+        ans = self.tokenizer.decode(out[0], skip_special_tokens=True).split("model\n")[-1].strip()
+        chat_history.append({"role": "user", "content": user_input})
+        chat_history.append({"role": "assistant", "content": ans})
+        return ans
 
     # ====================== 工具 ======================
     @staticmethod
-    def mask_outside_ultrasound(pixels):
-        try:
-            vid = pixels.copy()
-            mask = np.ones(vid.shape[1:3], dtype=np.uint8) * 255
-            return vid * mask[None,...,None]
-        except:
-            return pixels
-
-    @staticmethod
     def crop_and_scale(img, res=(224,224), zoom=0.1):
         h, w = img.shape[:2]
-        r_in, r_out = w / h, res[0] / res[1]
-        if r_in > r_out:
-            p = int((w - r_out * h) / 2)
-            img = img[:, p:-p]
-        elif r_in < r_out:
-            p = int((h - w / r_out) / 2)
+        r = w/h
+        tr = res[0]/res[1]
+        if r > tr:
+            p = int((w-tr*h)/2)
+            img = img[:,p:-p]
+        else:
+            p = int((h-w/tr)/2)
             img = img[p:-p]
-        if zoom > 0:
-            px, py = round(img.shape[1] * zoom), round(img.shape[0] * zoom)
-            img = img[py:-py, px:-px]
-        return cv2.resize(img, res, interpolation=cv2.INTER_CUBIC)
+        if zoom>0:
+            px,py=int(img.shape[1]*zoom),int(img.shape[0]*zoom)
+            img=img[py:-py,px:-px] if py>0 else img
+        return cv2.resize(img,res,interpolation=cv2.INTER_CUBIC)
 
-# ====================== 框架主逻辑 ======================
-def run_pipeline(video_dir, save_path):
-    print("Loading EchoGemma...")
-    model = EchoGemmaVQA()
+# ====================== 模型单例 ======================
+def get_model():
+    if "echogemma" not in _MODEL_CACHE:
+        _MODEL_CACHE["echogemma"] = EchoGemmaVQA()
+    return _MODEL_CACHE["echogemma"]
 
-    print(f"Processing videos from: {video_dir}")
-    video_tensor = model.process_video_folder(video_dir)
+# ====================== 交互对话 ======================
+def interactive_chat(media_path):
+    model = get_model()
+    video_tensor = model.load_media_auto(media_path)
+    chat_history = []
 
-    print("Generating report...")
-    report = model.generate_report(video_tensor)
+    print("\n" + "="*50)
+    print("🏥 心脏超声智能问答 | 全程中文")
+    print("     quit 退出 ｜ clear 清空对话")
+    print("="*50)
 
-    os.makedirs(Path(save_path).parent, exist_ok=True)
-    with open(save_path, "w", encoding="utf-8") as f:
-        f.write(report)
+    while True:
+        user = input("\n你：").strip()
+        if user in ["quit", "exit"]:
+            print("👋 对话结束")
+            break
+        if user == "clear":
+            chat_history = []
+            print("✅ 已清空")
+            continue
+        if not user:
+            continue
+        print("🤖 分析中...")
+        ans = model.chat(video_tensor, user, chat_history)
+        print(f"\n医师：\n{ans}")
 
-    print("✅ Report saved successfully!")
-    print("\n=== Generated Report ===")
-    print(report)
-    return report
-
-# ====================== Click 命令 ======================
+# ====================== 命令行（仅保留问答） ======================
 @click.command("visual_question_answering_echo")
-@click.option("--video_dir", type=str, required=True, help="Video/DICOM folder path")
-@click.option("--save_path", type=str, required=True, help="Path to save .txt report")
-def run(video_dir, save_path):
-    run_pipeline(video_dir, save_path)
+@click.option("--media", type=str, required=True, help="视频/DICOM文件路径")
+def run(media):
+    interactive_chat(media)
 
 # ====================== 引擎注册 ======================
 def register():
     return {
         "name": "visual_question_answering_echo",
         "entry": run,
-        "description": "EchoGemma 超声视频智能报告生成"
+        "description": "EchoGemma 心脏超声智能问答（仅对话）"
     }
 
 if __name__ == "__main__":

@@ -31,6 +31,7 @@
 |------|----------|----------|
 | **射血分数预测** | 预测左心室射血分数（LVEF），支持多clip推理 | R(2+1)D-18 |
 | **年龄预测** | 基于超声视频预测年龄 | R(2+1)D-18 |
+| **全自动舒张功能评估** | 端到端舒张功能分析，包含视图分类、质量控制、LVEF计算、左心房容积(LAVi)测量、多普勒参数提取，自动按照 ASE 2016 / 2025 指南分级 | 多模型集成流水线 |
 
 #### Step 5: 疾病预测（可选）
 | 模块 | 功能描述 | 模型架构 |
@@ -102,6 +103,11 @@ Step 4: 功能分析
 │  射血分数预测         │    │    年龄预测          │
 │  (LVEF计算)          │    │  (基于超声视频)       │
 └──────────────────────┘    └──────────────────────┘
+                ↓
+┌──────────────────────────────────────────────────┐
+│          全自动舒张功能评估                      │
+│  LVEF + LAVi + 多普勒测量 + ASE指南分级(2016/2025)│
+└──────────────────────────────────────────────────┘
                 ↓
 Step 5: 疾病预测（可选）
 ┌──────────────────────┐    ┌──────────────────────┐
@@ -178,6 +184,14 @@ EchoSky/
 │   │   │   ├── __init__.py
 │   │   │   └── echogemma.py                 # EchoGemma核心实现
 │   │   └── utils.py
+│   ├── automate_diastology/         # 全自动舒张功能评估
+│   │   ├── automate_diastology.py            # 主模块 端到端流水线
+│   │   └── utils/
+│   │       ├── __init__.py
+│   │       ├── ase_guidelines.py             # ASE 2016 / 2025 指南实现
+│   │       ├── dicom_utils.py                # DICOM 处理工具
+│   │       ├── model_utils.py                # 模型加载与推理
+│   │       └── lav_mask.py                   # 左心房分割
 │   └── landmark_detection/          # 地标检测模块（待开发）
 ├── configs/
 │   └── train_config.yaml            # 训练配置文件
@@ -259,6 +273,9 @@ engine.run("lv_ef_prediction_dynamic")
 
 # Step 10: 年龄预测
 engine.run("age_prediction", target="Age", manifest_path="path/to/manifest.csv", path_column="video_path", weights_path="path/to/weights.pt", save_path="output/predictions.csv")
+
+# Step 11: 全自动舒张功能评估 (端到端流水线)
+engine.run("automate_diastology", path="path/to/dicom/study", guideline_year=2025, save_path="output/diastology")
 
 # ========== 第五阶段：疾病预测（可选） ==========
 # Step 11: 肝脏疾病预测

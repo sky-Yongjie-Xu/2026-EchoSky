@@ -307,17 +307,20 @@ def view_106_inference(dataset,model,filename,device=torch.device("cuda:0"),batc
 def load_quality_classifier(input_type,
                             weights_path,
                             device=torch.device('cuda:0')):
-    weights = torch.load(weights_path, map_location=device, weights_only=True)
     if input_type=='image':
+        weights = torch.load(weights_path, map_location=device)
         model = densenet121(num_classes=1)
         weights = {key.replace('m.','',1):val for key,val in weights.items()}
+        model.load_state_dict(weights)
     elif input_type=='video':
+        weights = torch.load(weights_path, map_location=device, weights_only=True)
         new_state_dict = {}
         for k, v in weights.items():
             new_key = k[2:] if k.startswith('m.') else k
             new_state_dict[new_key] = v
+
         model = r2plus1d_18(num_classes=1)
-    model.load_state_dict(weights)
+        model.load_state_dict(new_state_dict, strict=True)
     model.to(device)
     return model.eval()
 

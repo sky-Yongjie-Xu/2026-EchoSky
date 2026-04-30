@@ -88,7 +88,7 @@ def run_diastology_pipeline(path, guideline_year, quality_threshold=0.0, to_save
     view_input = torch.stack(list(image_dataset.values()))
     filenames = list(image_dataset.keys())
     view_model = model_utils.load_view_classifier()
-    predicted_view = model_utils.view_106_inference(view_input, view_model, filenames)
+    predicted_view = model_utils.view_inference(view_input, view_model, filenames)
     view_df = pd.DataFrame({
         'filename': list(predicted_view.keys()),
         'predicted_view': list(predicted_view.values())
@@ -110,7 +110,7 @@ def run_diastology_pipeline(path, guideline_year, quality_threshold=0.0, to_save
     # 仅保留视频质量模型
     video_quality_model = model_utils.load_quality_classifier(
         input_type='video',
-        weights_path=weights_dir / 'quality_control/weights/video_quality_classifier.pt'
+        weights_path=weights_dir / 'quality_control/weights/quality_control_model.pt'
     )
 
     # 所有文件统一使用视频质量评估逻辑
